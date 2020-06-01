@@ -1,4 +1,4 @@
-/*
+/**
 Auto-Update-ThreAd Core Class
 author: Ivan Volkov
 date: 5/31/2020
@@ -19,10 +19,21 @@ Everybody is free to use this software, provided they:
 
 package auta.forums.hypixel;
 
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
 
 import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
@@ -34,36 +45,131 @@ import com.gargoylesoftware.htmlunit.html.HtmlPasswordInput;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
 
 public class AUTACore {
-	
+
 	// this is the delay between each iteration of your code
 	// DON'T make it too small because it will have a negative
 	// impact on both your connection and on the hypixel servers
-	private final int ACTION_DELAY = 12000; //milliseconds
+	private final int ACTION_DELAY = 6; //seconds
 
 
 	public static void main(String[] args) {
-
-	
-	}
-	public AUTACore(String uname, String passwd, String url) {
-
-		WebClient logged_client = getLoggedWebClient(uname, passwd);
-		//System.out.println(System.getProperty("user.dir"));
-		
-		AUTAction action = new AUTAction(logged_client);
-
-		
-		action.init();
-		while(true) {
-			action.loop();
-			try {
-				TimeUnit.SECONDS.sleep(ACTION_DELAY);
-			}catch(Exception e) {}
-			
-			
+		if(args.length != 0) {
+			boolean headless = false;
+			if(args[3].contentEquals("true"))
+				headless = true;
+			new AUTACore(args[0],args[1], headless);
 		}
+		new AUTACore("","", true);
+
 	}
-	
+	public AUTACore(String uname, String passwd, boolean headless) {
+		if(headless)
+			new MenuWindow();
+		else {
+			WebClient logged_client = getLoggedWebClient(uname, passwd);
+			startAction(logged_client);
+		}
+
+	}
+
+	// starts the AUTAction
+	private void startAction(WebClient client) {
+
+		// we use a thread so that the GUI can remain interactive
+		Thread action_thread = new Thread() {
+
+			public void run() {
+				AUTAction action = new AUTAction(client);
+				action.init();
+				while(true) {
+					action.loop();
+					try {
+						TimeUnit.SECONDS.sleep(ACTION_DELAY);
+					}catch(Exception e) {}
+				}
+			}
+
+		};
+		action_thread.start();
+	}
+
+	public class MenuWindow extends JFrame {
+		public MenuWindow () {
+
+			int screen_height = Toolkit.getDefaultToolkit().getScreenSize().height;
+			int screen_width = Toolkit.getDefaultToolkit().getScreenSize().width;
+
+			this.setDefaultCloseOperation(EXIT_ON_CLOSE);
+			this.setLayout(null);
+			this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			this.setAlwaysOnTop(false);
+			this.getContentPane().setBackground(new Color(255,255,244));
+			this.setResizable(false);
+			this.setTitle("Hypixel AUTACore Controller");
+			this.setSize((screen_width/4), (screen_height/2));
+			this.setLocation(screen_width/8, screen_height/8);
+
+			JTextField uname_field = new JTextField();
+			this.add(uname_field);
+
+			int uname_xpos = (screen_width/20);
+			int uname_ypos = (screen_height/192) + (screen_height/14);
+			int uname_width = (screen_width/5) - (screen_width/120);
+			int uname_height = (screen_height/36);
+			uname_field.setBounds(uname_xpos, uname_ypos, uname_width, uname_height);
+
+			JLabel uname_label = new JLabel("username: ");
+			this.add(uname_label);
+			uname_label.setBounds((screen_width/192),uname_ypos, (screen_width/20), uname_height );
+
+
+
+			JPasswordField passwd_field = new JPasswordField();
+			this.add(passwd_field);
+			int passwd_ypos = (screen_height/120) + (screen_height/10);
+			passwd_field.setBounds(uname_xpos, passwd_ypos, uname_width, uname_height);
+
+			JLabel passwd_label = new JLabel("password: ");
+			this.add(passwd_label);
+			passwd_label.setBounds((screen_width/192),passwd_ypos, (screen_width/20), uname_height );
+
+			JLabel title = new JLabel("Thread Controller ");
+			this.add(title);
+			title.setBounds((screen_width/21),(screen_height/128), (screen_width/5), (screen_height/18));
+			title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 28));
+
+
+			JButton login_button = new JButton("Login");
+			this.add(login_button);
+			login_button.setBounds((screen_width/13)+(screen_width/80),(screen_height/7), (screen_width/16), (screen_height/32));
+
+			login_button.addActionListener(new ActionListener() {
+
+				private boolean logged_in = false;
+
+				public void actionPerformed(ActionEvent arg0) {
+
+					if(logged_in)
+						return;
+
+					if(uname_field.getText().contentEquals("") || passwd_field.getText().contentEquals(""))
+						return;
+
+					WebClient client = getLoggedWebClient(uname_field.getText(),passwd_field.getText());
+					uname_field.setText("");
+					passwd_field.setText("");
+					logged_in = true;
+					startAction(client);
+
+				}
+
+			});
+
+			this.setVisible(true);
+		}
+
+	}
+
 
 	// returns a virtual 'client' that acts as a browser; used to interact with
 	// the hypixel website in order to get data to \ from the thread 

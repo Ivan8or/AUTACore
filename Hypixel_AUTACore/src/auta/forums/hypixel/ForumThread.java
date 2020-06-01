@@ -1,4 +1,4 @@
-/*
+/**
 Forum Thread Class
 author: Ivan Volkov
 date: 5/31/2020
@@ -15,8 +15,8 @@ Everybody is free to use this software, provided they:
  a) do not claim it as their own work
  b) do not use this software to any harmful / malicious end as decided by the Hypixel team or any governing body
  c) do not attempt to profit off of any software that makes use of this code
- 
-*/
+
+ */
 
 package auta.forums.hypixel;
 
@@ -29,7 +29,10 @@ import java.util.regex.Pattern;
 
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.WebClient;
+import com.gargoylesoftware.htmlunit.html.HtmlButton;
+import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
+import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
 
 public class ForumThread {
 
@@ -81,6 +84,9 @@ public class ForumThread {
 
 	// the name of the last user to reply to the thread
 	private String last_to_reply; 
+	
+	// a list of names of the last 5-15 people who replied to the thread (in order)
+	private List<String> last_few_to_reply;
 
 	// the time since the last user responded
 	private String last_response_time; 
@@ -97,10 +103,43 @@ public class ForumThread {
 		this.thread_url = "https://hypixel.net/threads/" + this.thread_id+"/";
 
 	}
-	
+
+
+	// changes the thread title to the specified text
+	public void setTitle(WebClient client, String title_text) {
+
+		HtmlPage page = null;
+		try {
+			page = client.getPage(thread_url+"edit");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		// getting the second form on the page; the first is the search bar
+		HtmlForm form = page.getForms().get(1);
+		HtmlTextInput new_title_input = form.getInputByName("title"); 
+		
+		if(!title_text.contains("[auta]")) {
+			title_text += " [auta]";
+		}
+		
+		new_title_input.setText(title_text);
+		
+		List<Object> buttons = page.getByXPath("//button[@class='button--primary button button--icon button--icon--save']");
+
+		HtmlButton button = (HtmlButton) buttons.get(0);
+
+		// pushing the 'submit' button
+		try {
+			button.click();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 
 	// deletes all cached fluid values forcing them to be recalculated
-	//  if the getter is called before the iteration ends
+	// call it as often as you need new values
 	// don't overuse this or else you'll be making a LOT of requests
 	// to hypixel's servers, which could break your program or get you in trouble
 	public void clearCache() {
@@ -112,7 +151,7 @@ public class ForumThread {
 		this.title = null;
 		this.section = null;		
 		this.num_pages = null;
-		
+		this.last_few_to_reply = null;
 
 		// only deletes cached valus for reactions and views
 		// if 
@@ -133,7 +172,7 @@ public class ForumThread {
 		}
 
 	}
-	
+
 
 	// returns the amount of time passed (in minutes) since the last response
 	public String getLastResponseTime(WebClient client) {
@@ -187,8 +226,11 @@ public class ForumThread {
 		// the '/latest' at the end makes the page jump to last reply
 		// we can get the name of the last replier from there
 		String full_url = "";
+		String content = "";
 		try {
-			full_url = client.getPage(thread_url+"latest").getUrl().toString();
+			HtmlPage last_page = client.getPage(thread_url+"latest");
+			full_url = last_page.getUrl().toString();
+			content = last_page.getWebResponse().getContentAsString();
 		} catch (FailingHttpStatusCodeException e) {
 			e.printStackTrace();
 		} catch (MalformedURLException e) {
@@ -198,15 +240,60 @@ public class ForumThread {
 		}
 
 		String match_post_id_regex = "^https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-\\d+)?#post-(\\d+)$";
-		String post_id = matchRegex(full_url, match_post_id_regex, 1).get(0);
+		List<String> post_ids = matchRegex(full_url, match_post_id_regex, 1);
+		String post_id = post_ids.get(post_ids.size()-1);
 
 		String match_last_poster_regex = "data-author=\"(.+)\" data-content=\"post-"+post_id+"\"";
-		String last_poster = matchRegex(full_url, match_last_poster_regex, 1).get(0);
+		String last_poster = matchRegex(content, match_last_poster_regex, 1).get(0);
 
 		this.last_to_reply = last_poster;
 		return last_poster;
 
 	}
+	
+	// returns a lis of the last 3 - 23 players to have replied to the thread
+	public List<String> getLastFewToReply(WebClient client) {
+
+		// prevents too many un-needed requests
+		// override this by using clearCache()
+		if(this.last_few_to_reply != null) {
+			return this.last_few_to_reply;
+		}
+		//getting URL of 'https://hypixel.net/threads/example-thread.1234567/latest'
+		// the '/latest' at the end makes the page jump to last reply
+		// we can get the name of the last replier from there
+		List<String> last_posters = new LinkedList<String>();
+		do {
+		String full_url = "";
+		String content = "";
+		try {
+			HtmlPage last_page = client.getPage(thread_url+"latest");
+			full_url = last_page.getUrl().toString();
+			content = last_page.getWebResponse().getContentAsString();
+		} catch (FailingHttpStatusCodeException e) {
+			e.printStackTrace();
+		} catch (MalformedURLException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		String match_posters_regex = "js-inlineModContainer  \" data-author=\"([^\"]+)\"";
+		
+		last_posters.addAll(matchRegex(content, match_posters_regex, 1));
+		
+		//if the current page only has one or two responses, it'll check the prior page too
+		}while(last_posters.size() < 3 && (this.getNumPages(client) != "1"));
+			
+		List<String> toReturn = new LinkedList<String>();
+		for(int i = last_posters.size()-1; i >=0;  i--) {
+			toReturn.add(last_posters.get(i));
+		}
+		this.last_few_to_reply = toReturn;
+		return toReturn;
+
+	}
+
 
 
 	// returns the total number of positive reactions the thread has received
@@ -214,8 +301,8 @@ public class ForumThread {
 
 		// prevents too many un-needed requests
 		// override this by using clearCache()
-		if(this.last_to_reply != null) {
-			return this.last_to_reply;
+		if(this.num_positive_reactions != null) {
+			return this.num_positive_reactions;
 		}
 
 		getSection(client);
@@ -258,7 +345,7 @@ public class ForumThread {
 			this.num_positive_reactions = reactions_list.get(0);
 			return ""+reactions_list.get(0);
 		}
-		
+
 		//this should never happen but who knows!
 		return this.num_positive_reactions;
 
@@ -288,7 +375,7 @@ public class ForumThread {
 			e.printStackTrace();
 		}
 		String match_num_pages_regex = "^https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-(\\d+))?#post-\\d+$";
-		List<String> toReturn = matchRegex(full_url, match_num_pages_regex);
+		List<String> toReturn = matchRegex(full_url, match_num_pages_regex,1);
 
 		//the url won't include a page if it's on page 1
 		if(toReturn.size() == 0) {
@@ -332,8 +419,7 @@ public class ForumThread {
 
 		// counting up the number of responses on the last page ourselves!
 		String get_num_replies_regex = "data-author=\".*\" data-content=\"post-\\d+\"";
-		List<String> section_list = matchRegex(content, get_num_replies_regex,1);
-		this.original_poster = section_list.size()+"";
+		List<String> section_list = matchRegex(content, get_num_replies_regex);
 
 		// subtracting 1 from the final result because the original poster doesn't count!
 		this.num_replies = (toReturn + section_list.size()-1)+"";
@@ -357,8 +443,8 @@ public class ForumThread {
 			e.printStackTrace();
 		}
 
-		String get_poster_regex = "<a href=\"\\/members\\/.+\\..+\\/\" class=\"username "
-				+ " u-concealed\" dir=\"auto\" data-user-id=\".*\" data-xf-init=\"member-tooltip\">(.+)<\\/a>";
+		String get_poster_regex = "<a href=\"\\/members\\/.+\\..+\\/\" class=\"username  u-concealed\" dir="
+				+ "\"auto\" data-user-id=\".*\" data-xf-init=\"member-tooltip\">(.+)<\\/a>";
 		List<String> section_list = matchRegex(content, get_poster_regex,1);
 		this.original_poster = section_list.get(0);
 		return section_list.get(0);
@@ -385,8 +471,10 @@ public class ForumThread {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		content = content.substring(content.indexOf("<title>"),content.lastIndexOf("</title>")+10);
 
-		String get_title_regex = "<title(.*).{3}Hypixel - Minecraft Server and Maps<\\/title>$";
+		String get_title_regex = "^<title>(.*).{3}Hypixel - Minecraft Server and Maps<\\/title>";
+
 		List<String> section_list = matchRegex(content, get_title_regex,1);
 		this.title = section_list.get(0);
 		return section_list.get(0);
