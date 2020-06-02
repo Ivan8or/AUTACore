@@ -40,8 +40,7 @@ public class AUTAction {
 	public void init() {
 		best_thread = new ForumThread("https://hypixel.net/threads/mathewbeau-is-possibly-the-most-famous-player-on-skyblock-auto.2949136/");
 		love_thread = new ForumThread("https://hypixel.net/threads/skyblock-romance-are-you-ready-to-find-your-true-love-or-simply-have-some-fun-auta.2956439/");
-	
-		//love_thread.setTitle(client, "Skyblock Romance! Are you ready to find your true love? Or simply have some fun ;) ");
+
 		prev_name = "";
 	}
 
@@ -51,24 +50,23 @@ public class AUTAction {
 		function2();
 		love_thread.clearCache();
 		best_thread.clearCache();
-		System.out.println(".");
-		
+		System.out.println("--break--");
 	}
 	public void function2() {
-		
-		
+
+
 		String recent_user = best_thread.getLastToReply(client);
 
 		if(!prev_name.contentEquals(recent_user)) {
-			
+
 			String[] options = {"weirdest","wackiest","smexiest","best","smartest","thiccest",
 					"hottest", "most beautiful", "funniest", "most intense", "strongest",
 					"bravest","greatest","moistest", "weakest", "stinkiest", "skinniest",
 					"nicest","itchiest","laziest","wealthiest","classiest", "cutest",
 					"most pogchamp","most famous", "oldest","glitchiest"
 			};
-			
-			
+
+
 			String next_adj = options[(int)(Math.random()*options.length)];
 			prev_name = recent_user;
 			String new_title = ""+ recent_user + " is possibly the "+next_adj+" player on skyblock [auta]";
@@ -80,30 +78,36 @@ public class AUTAction {
 		}
 	}
 	public void function1() {
-		
+
 		List<String> recent_users = love_thread.getLastFewToReply(client);
-		
+
 		String prev = "";
 		for(int i = 0; i < recent_users.size(); i++) {
-			System.out.print(recent_users.get(i) + " ");
+			
 			if(recent_users.get(i).contentEquals(prev)) {
 				recent_users.remove(i);
 				i--;
 			}
-			else
+			else {
 				prev = recent_users.get(i);
+				
+			}
+
 		}
-		System.out.println();
-		
-		String most_recent = recent_users.get(0);
-		String second_recent = recent_users.get(1);
-		System.out.println(most_recent + " " + second_recent);
-		
-		
+		String most_recent = "Ivan8or";
+		String second_recent = "Ivan8or";
+		try {
+			most_recent = recent_users.get(0);
+			second_recent = recent_users.get(1);
+		}catch(Exception e) {
+			System.err.println("FAILURE!");
+			return;
+		}
+
 		if(!most_recent.contentEquals(second_recent)
 				&& (!most_recent.contentEquals(old_first_recent)
 						|| !second_recent.contentEquals(old_second_recent))) {
-			
+
 			old_first_recent = most_recent;
 			old_second_recent = second_recent;
 			String[] location_options = {
@@ -112,38 +116,38 @@ public class AUTAction {
 					,"Diamond Reserves","Obsidian Sanctuary","Barnyard","Mushroom Desert","Winter Island"
 					, "End Island" 
 			};
-			
+
 			String[] action_options = {
 					"kissed","hugged","twerked together","smooched","had sexy times", "gazed into each other's eyes",
-					"talked dirty", "locked lips", "did the dirty", "drank the same potion", "were caught making out"
-					
-					};
-			
-			String[] relative_options = {
-				"at the","inside the","under the", "behind the", "in front of the", "above the"
+					"talked dirty", "locked lips", "did the dirty", "drank out of the same potion", "were caught making out"
+
 			};
-			
+
+			String[] relative_options = {
+					"at the","inside the","under the", "behind the", "in front of the", "above the"
+			};
+
 			String action = action_options[(int)(Math.random()*action_options.length)];
 			String location = location_options[(int)(Math.random()*location_options.length)];
 			String relative = relative_options[(int)(Math.random()*relative_options.length)];
-			
+
 			String new_title = "Skyblock Romance! " + second_recent +
-			" and " + most_recent + 
-			" " + action + 
-			" " + relative + 
-			" " + location + "! Scandalous!";
-			
+					" and " + most_recent + 
+					" " + action + 
+					" " + relative + 
+					" " + location + "! Scandalous!";
+
 			if(location.contentEquals("player")) {
 				if(Math.random() < .5)
-					action = second_recent+"'s Island";
+					location = second_recent+"'s Island";
 				else
-					action = most_recent+"'s Island";
-				new_title = "Skyblock Romance! " + second_recent + " and " + most_recent + " " + action + "at " + location + "! Scandalous!";
+					location = most_recent+"'s Island";
+				new_title = "Skyblock Romance! " + second_recent + " and " + most_recent + " " + action + " at " + location + "! Scandalous!";
 			}
 
 			love_thread.setTitle(client, new_title);
 			System.out.println("Love thread: "+ new_title + " [auta]");
 		}
 	}
-	
+
 }

@@ -49,22 +49,27 @@ public class AUTACore {
 	// this is the delay between each iteration of your code
 	// DON'T make it too small because it will have a negative
 	// impact on both your connection and on the hypixel servers
-	private final int ACTION_DELAY = 6; //seconds
+	private final int ACTION_DELAY = 12; //seconds
 
 
 	public static void main(String[] args) {
 		if(args.length != 0) {
 			boolean headless = false;
-			if(args[3].contentEquals("true"))
+			if(args[2].contentEquals("true"))
 				headless = true;
+				
 			new AUTACore(args[0],args[1], headless);
 		}
-		new AUTACore("","", true);
+		new AUTACore("","", false);
 
 	}
 	public AUTACore(String uname, String passwd, boolean headless) {
-		if(headless)
+		if(!headless)
+			try {
 			new MenuWindow();
+			}catch(Exception e) {
+				System.out.println("graphics GUI is unavailable on headless machines!");
+			}
 		else {
 			WebClient logged_client = getLoggedWebClient(uname, passwd);
 			startAction(logged_client);
@@ -201,9 +206,10 @@ public class AUTACore {
 			//waiting so cloudflare forwards us to hypixel's site
 			//since this is the very first page our browser connects to 
 			synchronized(login_page) {
-				int time_to_wait = 7000; //milliseconds
-				login_page.wait(time_to_wait);
-
+				try {
+					int seconds_delay = 25;
+					TimeUnit.SECONDS.sleep(seconds_delay); 
+				}catch(Exception e) {}
 			}
 
 			//the login form is the 2nd 'form' on the login page (the first one is the search bar)
@@ -230,6 +236,8 @@ public class AUTACore {
 
 				//login was not accepted - did you double check your username and password? (they're case sensitive)
 				System.out.println("Login failed! Aborting! Check your username and password.");
+				System.out.println("username: "+uname);
+				System.out.println("password: "+passwd);
 				System.exit(23);
 			}
 
@@ -245,10 +253,10 @@ public class AUTACore {
 			System.out.println("IOException - that's strange...");
 			e.printStackTrace();
 		}
-		catch (InterruptedException e) {
-			System.out.println("IOException - that's weird... are you practicing thread safety?");
-			e.printStackTrace();
-		}
+		//catch (InterruptedException e) {
+		//	System.out.println("IOException - that's weird... are you practicing thread safety?");
+		//	e.printStackTrace();
+		//}
 
 		//something went horribly wrong...
 		System.exit(2);

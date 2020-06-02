@@ -22,13 +22,16 @@ package auta.forums.hypixel;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.WebClient;
+import com.gargoylesoftware.htmlunit.WebResponse;
 import com.gargoylesoftware.htmlunit.html.HtmlButton;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
@@ -39,7 +42,18 @@ public class ForumThread {
 	// if the thread is further than this many pages back in the list,
 	// operations that require knowing where it is in the list will
 	// only return cached values, and won't get fresh ones!
-	private final int NUM_PAGES_TO_BE_IRRELEVANT = 5;
+	private final int NUM_PAGES_TO_BE_IRRELEVANT = 2;
+
+
+	// program must wait this long before any page request is made
+	// ensuring that too many requests are not sent too fast
+	private final int PAGE_DELAY = 500; // milliseconds
+
+	// saves already-requested webpages so that multiple
+	// requests don't need to be made
+	private LinkedList<CachedPage> cached_pages;
+
+
 
 	/*
 	 'static' variables; these may not change often (or at all)
@@ -49,19 +63,19 @@ public class ForumThread {
 	 */
 
 	// the url that a user would go to in order to view the thread
-	private String thread_url; 
+	public String thread_url; 
 
 	// the 7 digit UUID for the thread; this will never change
-	private String thread_id; 
+	public String thread_id; 
 
 	// the section of the forums that this thread is in (may change if thread is moved)
-	private String section; 
+	public String section; 
 
 	// the owner of the thread
-	private String original_poster;
+	public String original_poster;
 
 	// the current title of the thread (may or may not change, depending on what the software does)
-	private String title;
+	public String title;
 
 
 	/*
@@ -71,31 +85,39 @@ public class ForumThread {
 	 */
 
 	// how many views the thread has
-	private String num_views; 
+	public String num_views; 
 
 	// how many replies the thread has
-	private String num_replies; 
+	public String num_replies; 
 
 	// how many pages the thread has
-	private String num_pages; 
+	public String num_pages; 
 
 	// how many positive reactions the thread has
-	private String num_positive_reactions; 
+	public String num_positive_reactions; 
 
 	// the name of the last user to reply to the thread
-	private String last_to_reply; 
-	
-	// a list of names of the last 5-15 people who replied to the thread (in order)
-	private List<String> last_few_to_reply;
+	public String last_to_reply; 
 
+	// a list of names of the last 5-15 people who replied to the thread (in order)
+	public List<String> last_few_to_reply;
+
+	// the text of the most recent response to the thread
+	public String last_response;
+	
+	// a list containing the texts in a few of the most recent responses
+	public List<String> last_few_responses;
+	
 	// the time since the last user responded
-	private String last_response_time; 
+	public String last_response_time; 
 
 	// the page number of the thread in the forums
-	private String page_on; 
+	public String page_on; 
 
 
 	public ForumThread (String thread_url) {
+
+		cached_pages = new LinkedList<CachedPage>();
 
 		// makes sure the thread url passed in isn't weird / unusable
 		this.thread_url = thread_url;
@@ -108,23 +130,22 @@ public class ForumThread {
 	// changes the thread title to the specified text
 	public void setTitle(WebClient client, String title_text) {
 
-		HtmlPage page = null;
-		try {
-			page = client.getPage(thread_url+"edit");
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		HtmlPage page = getPageSafely( client, thread_url+"edit");
 
 		// getting the second form on the page; the first is the search bar
 		HtmlForm form = page.getForms().get(1);
+
 		HtmlTextInput new_title_input = form.getInputByName("title"); 
-		
+
+		// including [auta] in the title
+		// please don't remove this
 		if(!title_text.contains("[auta]")) {
 			title_text += " [auta]";
 		}
-		
+
 		new_title_input.setText(title_text);
-		
+
 		List<Object> buttons = page.getByXPath("//button[@class='button--primary button button--icon button--icon--save']");
 
 		HtmlButton button = (HtmlButton) buttons.get(0);
@@ -152,6 +173,7 @@ public class ForumThread {
 		this.section = null;		
 		this.num_pages = null;
 		this.last_few_to_reply = null;
+		this.cached_pages.clear();
 
 		// only deletes cached valus for reactions and views
 		// if 
@@ -183,22 +205,11 @@ public class ForumThread {
 			return this.last_response_time;
 		}
 
-		String full_url = "";
-		String content = "";
-		try {
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		HtmlPage page = getPageSafely( client, thread_url+"latest");
+		String full_url = page.getUrl().toString();
+		String content = page.getWebResponse().getContentAsString();
 
-			//using the same page to get both the URL and the html content
-			HtmlPage last_page = client.getPage(thread_url+"latest");
-			full_url = last_page.getUrl().toString();
-			content = last_page.getWebResponse().getContentAsString();
-
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 
 		String match_post_id_regex = "^https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-\\d+)?#post-(\\d+)$";
 		String post_id = matchRegex(full_url, match_post_id_regex, 1).get(0);
@@ -225,19 +236,12 @@ public class ForumThread {
 		//getting URL of 'https://hypixel.net/threads/example-thread.1234567/latest'
 		// the '/latest' at the end makes the page jump to last reply
 		// we can get the name of the last replier from there
-		String full_url = "";
-		String content = "";
-		try {
-			HtmlPage last_page = client.getPage(thread_url+"latest");
-			full_url = last_page.getUrl().toString();
-			content = last_page.getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		HtmlPage page = getPageSafely( client, thread_url+"latest");
+		String full_url = page.getUrl().toString();
+		String content = page.getWebResponse().getContentAsString();
+
 
 		String match_post_id_regex = "^https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-\\d+)?#post-(\\d+)$";
 		List<String> post_ids = matchRegex(full_url, match_post_id_regex, 1);
@@ -251,7 +255,14 @@ public class ForumThread {
 
 	}
 	
-	// returns a lis of the last 3 - 23 players to have replied to the thread
+	public String getLastResponseText(WebClient client) {
+		
+		String split_into_bodies_regex = "<a href=\"\\/threads\\/.+\\.\\d+\\/post-\\d+\" rel=\"nofollow\">\r\n" + 
+				"#(\\d*,?\\d+)";
+		return "";
+	}
+	
+	// returns a list of the last few users to have replied to the thread
 	public List<String> getLastFewToReply(WebClient client) {
 
 		// prevents too many un-needed requests
@@ -263,28 +274,27 @@ public class ForumThread {
 		// the '/latest' at the end makes the page jump to last reply
 		// we can get the name of the last replier from there
 		List<String> last_posters = new LinkedList<String>();
+		String page_on = this.getNumPages(client);
+		String url_to_check = thread_url+"latest";
 		do {
-		String full_url = "";
-		String content = "";
-		try {
-			HtmlPage last_page = client.getPage(thread_url+"latest");
-			full_url = last_page.getUrl().toString();
-			content = last_page.getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		String match_posters_regex = "js-inlineModContainer  \" data-author=\"([^\"]+)\"";
-		
-		last_posters.addAll(matchRegex(content, match_posters_regex, 1));
-		
-		//if the current page only has one or two responses, it'll check the prior page too
-		}while(last_posters.size() < 3 && (this.getNumPages(client) != "1"));
 			
+			// sacrifice a bit of time to get the webpage to ensure nothing breaks
+			HtmlPage page = getPageSafely( client, url_to_check);
+			String full_url = page.getUrl().toString();
+			String content = page.getWebResponse().getContentAsString();
+
+
+			String match_posters_regex = "js-inlineModContainer  \" data-author=\"([^\"]+)\"";
+			List<String> results = matchRegex(content, match_posters_regex, 1);
+			last_posters.addAll(0,results);
+
+			//adjusts the page and url, just in case
+			page_on = (Integer.parseInt(page_on)-1)+"";
+			url_to_check = thread_url+"page-"+page_on;
+			
+			//if the current page has less than [5] responses, it'll check the prior page too
+		}while(last_posters.size() < 5 && (this.getNumPages(client) != "1"));
+
 		List<String> toReturn = new LinkedList<String>();
 		for(int i = last_posters.size()-1; i >=0;  i--) {
 			toReturn.add(last_posters.get(i));
@@ -313,21 +323,10 @@ public class ForumThread {
 			return this.num_positive_reactions;
 		}
 
-		String content = "";
-		try {
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, "https://hypixel.net/forums/"+this.section+"/"+"page-"+page_on)
+				.getWebResponse().getContentAsString();
 
-			//if the thread is too far back in the listings (too old / irrelevant)
-			// we give up on finding the current reactions and just use the cached number
-			content = client.getPage("https://hypixel.net/forums/"+this.section+"/"+"page-"+page_on).getWebResponse().getContentAsString();
-
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		//2949136.*<dt>Views<\/dt> <dd>(.+)<\/dd>.*2949136
 
 		int last_pos = content.lastIndexOf(this.thread_id);
 		content = content.substring(0,last_pos);
@@ -364,21 +363,18 @@ public class ForumThread {
 		//getting URL of 'https://hypixel.net/threads/example-thread.1234567/latest'
 		// the '/latest' at the end makes the page jump to last reply
 		// and the last reply is on the last page :)
-		String full_url = "";
-		try {
-			full_url = client.getPage(this.thread_url+"latest").getUrl().toString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		String match_num_pages_regex = "^https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-(\\d+))?#post-\\d+$";
-		List<String> toReturn = matchRegex(full_url, match_num_pages_regex,1);
+	
 
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String full_url = getPageSafely( client, this.thread_url+"latest")
+				.getUrl().toString();
+
+		String match_num_pages_regex = "https:\\/\\/hypixel.net\\/threads\\/[^\\/]+\\/(?:page-(\\d+))?#post-\\d+";
+		List<String> toReturn = matchRegex(full_url, match_num_pages_regex,1);
+		
 		//the url won't include a page if it's on page 1
 		if(toReturn.size() == 0) {
+			System.out.println("no pages??");
 			this.num_pages = "1";
 			return "1";
 		}
@@ -406,20 +402,16 @@ public class ForumThread {
 		int replies_per_page = 20;
 		toReturn += (Integer.parseInt(num_pages) -1) * replies_per_page;
 
-		String content = "";
-		try {
-			content = client.getPage(thread_url).getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, thread_url)
+				.getWebResponse().getContentAsString();
+
 
 		// counting up the number of responses on the last page ourselves!
-		String get_num_replies_regex = "data-author=\".*\" data-content=\"post-\\d+\"";
+		String get_num_replies_regex = "<a href=\"\\/threads\\/.+\\.\\d+\\/post-\\d+\" rel=\"nofollow\">\r\n" + 
+				"#(\\d*,?\\d+)";
 		List<String> section_list = matchRegex(content, get_num_replies_regex);
+
 
 		// subtracting 1 from the final result because the original poster doesn't count!
 		this.num_replies = (toReturn + section_list.size()-1)+"";
@@ -432,19 +424,13 @@ public class ForumThread {
 		if(this.original_poster != null)
 			return this.original_poster;
 
-		String content = "";
-		try {
-			content = client.getPage(thread_url).getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, thread_url)
+				.getWebResponse().getContentAsString();
 
 		String get_poster_regex = "<a href=\"\\/members\\/.+\\..+\\/\" class=\"username  u-concealed\" dir="
 				+ "\"auto\" data-user-id=\".*\" data-xf-init=\"member-tooltip\">(.+)<\\/a>";
+
 		List<String> section_list = matchRegex(content, get_poster_regex,1);
 		this.original_poster = section_list.get(0);
 		return section_list.get(0);
@@ -461,18 +447,11 @@ public class ForumThread {
 			return this.title;
 		}
 
-		String content = "";
-		try {
-			content = client.getPage(thread_url).getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		content = content.substring(content.indexOf("<title>"),content.lastIndexOf("</title>")+10);
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, thread_url)
+				.getWebResponse().getContentAsString();
 
+		content = content.substring(content.indexOf("<title>"),content.lastIndexOf("</title>")+10);
 		String get_title_regex = "^<title>(.*).{3}Hypixel - Minecraft Server and Maps<\\/title>";
 
 		List<String> section_list = matchRegex(content, get_title_regex,1);
@@ -489,16 +468,9 @@ public class ForumThread {
 		if(this.section != null)
 			return this.section;
 
-		String content = "";
-		try {
-			content = client.getPage(thread_url).getWebResponse().getContentAsString();
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, thread_url)
+				.getWebResponse().getContentAsString();
 
 		String get_section_regex = "<a href=\"\\/forums\\/(.+)\\/\" itemprop=\"item\">";
 		List<String> section_list = matchRegex(content, get_section_regex,1);
@@ -519,21 +491,16 @@ public class ForumThread {
 			return this.page_on;
 		}
 
-
 		int cur_page = 0;
 		int max_pages = NUM_PAGES_TO_BE_IRRELEVANT;
+
 		do {
 			cur_page++;
-			String content = "";
-			try {
-				content = client.getPage("https://hypixel.net/forums/"+this.section+"/page-"+cur_page).getWebResponse().getContentAsString();
-			} catch (FailingHttpStatusCodeException e) {
-				e.printStackTrace();
-			} catch (MalformedURLException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+
+			// sacrifice a bit of time to get the webpage to ensure nothing breaks
+			String content = getPageSafely( client, "https://hypixel.net/forums/"+this.section+"/page-"+cur_page)
+					.getWebResponse().getContentAsString();
+
 			content = content.replaceAll("\n", " ");
 
 			String locate_thread_regex = "href=\"\\/threads\\/.+\\."+this.thread_id;
@@ -559,7 +526,7 @@ public class ForumThread {
 	public String getNumViews(WebClient client) {
 
 
-		// prevents too many un-needed requests
+		// prevents too many un-needed searches
 		// override this by using clearCache()
 		if(this.num_views != null) {
 			return this.num_views;
@@ -574,20 +541,10 @@ public class ForumThread {
 			return this.num_views;
 		}
 
-		String content = "";
-		try {
+		// sacrifice a bit of time to get the webpage to ensure nothing breaks
+		String content = getPageSafely( client, "https://hypixel.net/forums/"+this.section+"/"+"page-"+page_on)
+				.getWebResponse().getContentAsString();
 
-			//if the thread is too far back in the listings (too old / irrelevant)
-			// we give up on finding the current views and just use the cached number
-			content = client.getPage("https://hypixel.net/forums/"+this.section+"/"+"page-"+page_on).getWebResponse().getContentAsString();
-
-		} catch (FailingHttpStatusCodeException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 
 		int first_pos = content.indexOf(this.thread_id+"");
 		int last_pos = content.lastIndexOf(this.thread_id+"");
@@ -610,7 +567,7 @@ public class ForumThread {
 
 
 	// gets the thread ID value (used to search for other information about the thread)
-	private String getThreadID() {
+	public String getThreadID() {
 
 		// prevents too many un-needed requests
 		if(thread_id != null) {
@@ -632,6 +589,52 @@ public class ForumThread {
 	}
 
 
+	// paces the program so that too many requests are not sent too quickly
+	// otherwise hypixel will temporarily block the browser
+	private HtmlPage getPageSafely(WebClient client, String url) {
+		System.out.print("attempting a request -");
+		//checking cached pages for if the url was already obtained
+		for(CachedPage cached_page: this.cached_pages) 
+			if(cached_page.getURL().contentEquals(url)) {
+				System.out.println(" used cache!");
+				return cached_page.getPage();
+			}
+
+		System.out.println(" none in cache:");
+		System.out.println(url);
+		HtmlPage client_page = null;
+		try {
+			do {
+				synchronized(this) {
+					try {
+						TimeUnit.MILLISECONDS.sleep(PAGE_DELAY);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				client_page = client.getPage(url);
+			}while(client_page.getWebResponse().getContentAsString().contains("<title>404 Not Found</title>"));
+
+
+		} catch (Exception e) {
+			e.printStackTrace();
+
+			// in case anything unexpected happens, we'll assume hypixel got
+			// too many requests and create a short break for everything to 
+			// recover
+			try {
+				TimeUnit.SECONDS.sleep(300);
+			} catch (InterruptedException ee) {
+				ee.printStackTrace();
+			}
+			return getPageSafely(client, url);
+
+		} 
+
+		cached_pages.add(new CachedPage(client_page, url));
+		return client_page;
+	}
+
 	// returns all results of a regex filter on a body of text, defaults to group 0 (the entire result)
 	private List<String> matchRegex(String body, String pattern) {
 		return matchRegex(body, pattern, 0);
@@ -651,5 +654,29 @@ public class ForumThread {
 		}
 
 		return toReturn;
+	}
+
+
+	// a wrapper class meant to hold on to a known web page for a short period of time
+	// this saves on resources sending and receiving web requests
+	private class CachedPage {
+
+		private final String url;
+		private final HtmlPage page;
+
+		public CachedPage(HtmlPage page, String url) {
+			this.page = page;
+			this.url = url;
+		}
+
+		// gets the cached page without sending any server requests :)
+		public HtmlPage getPage() {
+			return page;
+		}
+
+		// returns the url that returned the cached page
+		public String getURL() {
+			return url;
+		}
 	}
 }
