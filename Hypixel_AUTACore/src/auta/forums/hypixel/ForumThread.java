@@ -33,6 +33,7 @@ import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.WebClient;
 import com.gargoylesoftware.htmlunit.WebResponse;
 import com.gargoylesoftware.htmlunit.html.HtmlButton;
+import com.gargoylesoftware.htmlunit.html.HtmlDivision;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
@@ -42,12 +43,12 @@ public class ForumThread {
 	// if the thread is further than this many pages back in the list,
 	// operations that require knowing where it is in the list will
 	// only return cached values, and won't get fresh ones!
-	private final int NUM_PAGES_TO_BE_IRRELEVANT = 2;
+	public final int NUM_PAGES_TO_BE_IRRELEVANT = 2;
 
 
 	// program must wait this long before any page request is made
 	// ensuring that too many requests are not sent too fast
-	private final int PAGE_DELAY = 500; // milliseconds
+	public final int PAGE_DELAY = 750; // milliseconds
 
 	// saves already-requested webpages so that multiple
 	// requests don't need to be made
@@ -255,12 +256,22 @@ public class ForumThread {
 
 	}
 	
-	public String getLastResponseText(WebClient client) {
-		
-		String split_into_bodies_regex = "<a href=\"\\/threads\\/.+\\.\\d+\\/post-\\d+\" rel=\"nofollow\">\r\n" + 
-				"#(\\d*,?\\d+)";
-		return "";
-	}
+	// this is a WIP function but has been delayed due to the issues with CloudFlare, it will not work
+	
+//	public String getLastResponseText(WebClient client) {
+//		
+//		//String split_into_bodies_regex = "<a href=\"\\/threads\\/.+\\.\\d+\\/post-\\d+\" rel=\"nofollow\">\r\n#(\\d*,?\\d+)";
+//		
+//		HtmlPage page = getPageSafely(client, thread_url+"latest");
+//		List<Object> posts = page.getByXPath("div[@class='message-content js-messageContent']");
+//		
+//		for(Object post: posts) {
+//			System.out.println(((HtmlDivision) post).asXml());
+//			return "";
+//		}
+//		System.out.println("none...");
+//		return "";
+//	}
 	
 	// returns a list of the last few users to have replied to the thread
 	public List<String> getLastFewToReply(WebClient client) {
@@ -513,8 +524,8 @@ public class ForumThread {
 		}while(cur_page <= max_pages);
 
 		//returns X+ when the number of pages exceeds the limit
-		this.page_on = max_pages+"+";
-		return max_pages+"+";
+		this.page_on = (max_pages+1)+"";
+		return (max_pages+1)+"";
 
 	}
 

@@ -25,34 +25,54 @@ import java.util.List;
 import com.gargoylesoftware.htmlunit.WebClient;
 
 public class AUTAction {
+	
+	// the virtual browser that is required to work with forum threads
+	private WebClient client;
+	
+	// we create the virtual client in the AUTACore class
 	public AUTAction(WebClient client) {
 		this.client = client;
 	}
-
-	private WebClient client;
+	
+	// my threads; feel free to delete / make your own
 	private ForumThread best_thread;
 	private ForumThread love_thread;
 
+	// some variables I use in multiple functions; feel free to delete / make your own
 	private String prev_name;
 	private String old_first_recent = "";
 	private String old_second_recent = "";
 
+
+	// any code in here will only be called once; use it to initialize your threads
 	public void init() {
+		
+		// you will not be able to edit the content in these forum links unless you log in with the account that posted them in the first place
 		best_thread = new ForumThread("https://hypixel.net/threads/mathewbeau-is-possibly-the-most-famous-player-on-skyblock-auto.2949136/");
 		love_thread = new ForumThread("https://hypixel.net/threads/skyblock-romance-are-you-ready-to-find-your-true-love-or-simply-have-some-fun-auta.2956439/");
-
+		
+		
+		// changing some variables, you can delete this
 		prev_name = "";
 	}
 
+	
+	// any code in here will be run once every [delay] seconds
+	// use this for the logic your threads need
 	public void loop() {
 
-		function1();
-		function2();
+
+		romanceThreadFunction();
 		love_thread.clearCache();
+
+		bestPlayerFunction();
 		best_thread.clearCache();
-		System.out.println("--break--");
+		System.out.println("--pause--");
 	}
-	public void function2() {
+	
+	// the function that handles all logic for the "PlayerName is the best player on Skyblock!" thread
+	// it's messy because I don't want people to reuse it; make your own thread! :)
+	public void bestPlayerFunction() {
 
 
 		String recent_user = best_thread.getLastToReply(client);
@@ -70,27 +90,38 @@ public class AUTAction {
 			String next_adj = options[(int)(Math.random()*options.length)];
 			prev_name = recent_user;
 			String new_title = ""+ recent_user + " is possibly the "+next_adj+" player on skyblock [auta]";
+
+			int super_rare = (int) (Math.random()* 100);
 			if(recent_user.contentEquals("Ivan8or")) {
 				new_title = "Nobody is the best player on skyblock [auta]";
+				super_rare = 0;
+			}
+			if(super_rare == 69) {
+				System.out.println("super secret title!");
+				new_title = ""+ recent_user + " is absolutely the "+next_adj+" player on skyblock [auta]";
+				new_title = new_title.toUpperCase();
 			}
 			best_thread.setTitle(client, new_title);
 			System.out.println("Best thread: "+ new_title);
 		}
 	}
-	public void function1() {
+	
+	// the function that handles all logic for the "Skyblock Romance! Player1 and Player2 caught kissing..." thread
+	// it's messy because I don't want people to reuse it; make your own thread! :)
+	public void romanceThreadFunction() {
 
 		List<String> recent_users = love_thread.getLastFewToReply(client);
 
 		String prev = "";
 		for(int i = 0; i < recent_users.size(); i++) {
-			
+
 			if(recent_users.get(i).contentEquals(prev)) {
 				recent_users.remove(i);
 				i--;
 			}
 			else {
 				prev = recent_users.get(i);
-				
+
 			}
 
 		}

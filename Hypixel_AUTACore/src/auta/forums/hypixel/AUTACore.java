@@ -49,9 +49,10 @@ public class AUTACore {
 	// this is the delay between each iteration of your code
 	// DON'T make it too small because it will have a negative
 	// impact on both your connection and on the hypixel servers
-	private final int ACTION_DELAY = 12; //seconds
+	private final int ACTION_DELAY = 16; //seconds
 
 
+	// use this if you want to run the program from the command line
 	public static void main(String[] args) {
 		if(args.length != 0) {
 			boolean headless = false;
@@ -63,6 +64,8 @@ public class AUTACore {
 		new AUTACore("","", false);
 
 	}
+	
+	// will launch up the GUI
 	public AUTACore(String uname, String passwd, boolean headless) {
 		if(!headless)
 			try {
@@ -194,7 +197,7 @@ public class AUTACore {
 
 		//other stuff...
 		webClient.getOptions().setThrowExceptionOnFailingStatusCode(false);
-		webClient.getCache().setMaxSize(0);
+		webClient.getCache().setMaxSize(50);
 		webClient.waitForBackgroundJavaScript(10000);
 		webClient.setJavaScriptTimeout(10000);
 		webClient.waitForBackgroundJavaScriptStartingBefore(7000);
@@ -207,7 +210,7 @@ public class AUTACore {
 			//since this is the very first page our browser connects to 
 			synchronized(login_page) {
 				try {
-					int seconds_delay = 25;
+					int seconds_delay = 15;
 					TimeUnit.SECONDS.sleep(seconds_delay); 
 				}catch(Exception e) {}
 			}
