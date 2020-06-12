@@ -11,9 +11,8 @@ AUTACore: the main class which creates a virtual browser that logs in to hypixel
 
 
 
-Currently, this software is NON-FUNCTIONAL due to Cloudflare being a meanie
-
-read this thread: https://hypixel.net/threads/news-about-auta-threads.2963018/
+Currently, this software is NON-FUNCTIONAL due to Cloudflare being a meanie (
+read this thread for more): https://hypixel.net/threads/news-about-auta-threads.2963018/
 for more information on that!
 
 
